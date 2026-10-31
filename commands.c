@@ -1,3 +1,4 @@
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -5,21 +6,23 @@
 #include <errno.h>
 #include "commands.h"
 #include "parameters.h"
-#include "battery.h"
-
-
+#include "battery_status.h"
+#include "Hal.h"
+ 
+ 
 #define MAX_ARGS 8
-
+ 
 typedef int (*CmdFn)(BatteryPack * p, int argc, char ** argv);
-
+ 
 typedef struct {
     const char * name;
+    const char * usage;
     const char * help;
     CmdFn fn;
 } Command;
-
-
-
+ 
+ 
+ 
 static bool parse_i32(const char*s, int32_t*out) {
     char *end;
     errno = 0;
@@ -29,7 +32,7 @@ static bool parse_i32(const char*s, int32_t*out) {
     *out = (int32_t)v;
     return true;
 }
-
+ 
 static bool parse_double(const char *s, double *out) { 
     char *end; 
     errno = 0;
@@ -39,37 +42,37 @@ static bool parse_double(const char *s, double *out) {
     *out = v; 
     return true;
 }
-
+ 
 static int32_t c_to_dc(double c) { 
     return (int32_t)(c >= 0 ? c * 10 + 0.5 : c * 10 - 0.5);
 }
-
-
+ 
+ 
 static int cmd_help(BatteryPack * p, int argc, char ** argv);
-
+ 
 static int cmd_help(BatteryPack *p, int argc, char **argv);
-
+ 
 static int cmd_status(BatteryPack *p, int argc, char **argv) { 
     (void)argc;
     (void)argv;
     battery_print_status(p);
     return CMD_OK;
 }
-
+ 
 static int cmd_cells(BatteryPack *p, int argc, char **argv) { 
     (void)argc;
     (void)argv;
     battery_print_cells(p);
     return CMD_OK;
 }
-
+ 
 static int cmd_faults (BatteryPack *p, int argc, char **argv) { 
     (void)argc;
     (void)argv;
     battery_print_faults(p);
     return CMD_OK;
 }
-
+ 
 static int cmd_clear(BatteryPack *p, int argc, char **argv) { 
     (void) argc;
     (void) argv;
@@ -77,7 +80,7 @@ static int cmd_clear(BatteryPack *p, int argc, char **argv) {
     printf(" Cleared %d latched faults and if the cause is still there it will trip again\n", n);
     return CMD_OK;
 }
-
+ 
 static int cmd_params(BatteryPack *p, int argc, char **argv) { 
     (void)p;
     (void)argc;
@@ -85,7 +88,7 @@ static int cmd_params(BatteryPack *p, int argc, char **argv) {
     params_print();
     return CMD_OK;
 }
-
+ 
 static int cmd_set(BatteryPack *p, int argc, char **argv){
     (void)p;
     int32_t v;
@@ -99,9 +102,9 @@ static int cmd_set(BatteryPack *p, int argc, char **argv){
             printf(" %s = %ld %s\n", info->name, (long)*info ->value, info->unit);
             return CMD_OK;
         }
-        case PARAM_UNKNOWN;
+        case PARAM_UNKNOWN:
         printf("Unknown parameter '%s'\n", argv[1]);
-
+ 
         return CMD_ERROR;
         
         case PARAM_OUT_OF_RANGE:{
@@ -112,7 +115,7 @@ static int cmd_set(BatteryPack *p, int argc, char **argv){
         default:
             return CMD_ERROR;/*Incosistent parameters */
         }
-
+ 
 }
 static int cmd_defaults(BatteryPack *p, int argc, char **argv) { 
     (void)p;
@@ -122,7 +125,7 @@ static int cmd_defaults(BatteryPack *p, int argc, char **argv) {
     printf("Parameters reset to default values\n");
     return CMD_OK;
 }
-
+ 
 static int cmd_run(BatteryPack *p, int argc, char **argv) { 
     int32_t n = 1, every = 0;
     if((argc >= 2 && !parse_i32(argv[1], &n))|| (argc >= 3 && !parse_i32(argv[2], &every))|| n < 1 || n > 10000000 || every < 0){
@@ -134,9 +137,10 @@ static int cmd_run(BatteryPack *p, int argc, char **argv) {
         if (every > 0 && i % every == 0 && i != n) {
             battery_print_line(p);
         }
-        battery_print_line(p);
-        return CMD_OK;
     }
+    battery_print_line(p);
+    return CMD_OK;
+}
 static int cmd_log(BatteryPack *p, int argc, char **argv) { 
    if(argc != 2 || (strcmp(argv[1], "on") && strcmp(argv[1],"off"))) {
     printf(" usage: log on|off\n");
@@ -146,11 +150,11 @@ static int cmd_log(BatteryPack *p, int argc, char **argv) {
    printf(" event log %s\n", p->verbose ? "ON" : "OFF");
    return CMD_OK;
 }
-
+ 
 static int cmd_sim(BatteryPack *p, int argc, char **argv) { 
     double d; 
     int32_t n; 
-
+ 
     if (argc == 2 && strcmp(argv[1], "show") == 0) { 
         hal_sim_print();
         return CMD_OK;
@@ -165,7 +169,7 @@ static int cmd_sim(BatteryPack *p, int argc, char **argv) {
         printf(" load = %ld mA%s\n", (long)n, n > 0 ? "": "(unplugged)");
         return CMD_OK;
     }
-    if (argc == 3 && strcmp(argv[1], "temp") == 0 && parse_double(argv[2], %d)) { 
+    if (argc == 3 && strcmp(argv[1], "temp") == 0 && parse_double(argv[2], &d)) { 
         hal_sim_set_temp_dc(c_to_dc(d));
         printf(" cell temperature forced to %.1fC\n", d);
         return CMD_OK;
@@ -197,9 +201,9 @@ static int cmd_quit(BatteryPack *p, int argc, char **argv) {
     (void)argv;
     return CMD_QUIT;
 }
-
+ 
 //command table that will add a new command 
-
+ 
 static const Command COMMANDS[] = {
     {"help","help","list commands",cmd_help},
     {"status","status","full pack status and direction",cmd_status},
@@ -214,20 +218,20 @@ static const Command COMMANDS[] = {
     {"sim","sim <...>", "control the simulated hardware",cmd_sim},
     {"quit","quit","exit",cmd_quit},
 };
-
-#define NUM_COMMANDS ((int) (size of COMMANDS / sizeof COMMANDS[0]))
-
-static int cmd_elp(BatteryPack *p, int argc, char **argv) { 
+ 
+#define NUM_COMMANDS ((int) (sizeof COMMANDS / sizeof COMMANDS[0]))
+ 
+static int cmd_help(BatteryPack *p, int argc, char **argv) { 
     (void)p;
     (void)argc;
     (void)argv;
     for (int i = 0; i < NUM_COMMANDS; i++) 
-    printf(" %-28s %s\n", COMMANDS[1].usage, COMMANDS[i].help);
+    printf(" %-28s %s\n", COMMANDS[i].usage, COMMANDS[i].help);
     printf(" sim subcommands: show | input on|off | load <mA> | temp <C> | ambient <C> | soc <pct> | cell <n> <pct>\n");
     return CMD_OK;
-
+ 
 }
-
+ 
 int commands_execute(BatteryPack *p, char *line) { 
     char *argv[MAX_ARGS];
     int argc = 0;
@@ -237,17 +241,18 @@ int commands_execute(BatteryPack *p, char *line) {
     argv[argc++] = tok;
     if (argc == 0) return CMD_OK;
     if (strcmp(argv[0], "exit") == 0) return CMD_QUIT;
-
-    for(int i = 0; i < NUM_COMMANDS; i++) 
-     if (strcmp(argv[0], COMMANDS[i].name) == 0)
-        return COMMANDS[i].fn(p, argc, argv);
-
-        printf(" unknown command '%s'(type 'help') \n", argv[0]);
-        return CMD_ERROR;
+ 
+    for (int i = 0; i < NUM_COMMANDS; i++) {
+        if (strcmp(argv[0], COMMANDS[i].name) == 0)
+            return COMMANDS[i].fn(p, argc, argv);
+    }
+ 
+    printf(" unknown command '%s' (type 'help')\n", argv[0]);
+    return CMD_ERROR;
 }
-
-
-
+ 
+ 
+ 
 /*void show_battery_status(const BatteryData * battery) {
     System.out.println()
 }*/

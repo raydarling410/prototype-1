@@ -1,5 +1,5 @@
 #include "battery_status.h"
-#include "hal.h"
+#include "Hal.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -17,7 +17,7 @@ static const int32_t OCV_TABLE[][2] = {
 
 static int32_t ocv_to_soc_pct(int32_t mv) {
     if(mv <= OCV_TABLE[0][0]) return 0;
-    for(inti = 1; i < OCV_N; i++) {
+    for(int i = 1; i < OCV_N; i++) {
         if (mv <= OCV_TABLE[i][0]) {
             int32_t v0 = OCV_TABLE[i-1][0], v1 = OCV_TABLE[i][0];
             int32_t s0 = OCV_TABLE[i-1][1], s1 = OCV_TABLE[i][1];
@@ -37,11 +37,11 @@ static void set_soc_pct(BatteryPack *p, int32_t pct) {
 
 static void print_v(int32_t mv) { 
     int32_t a = mv < 0 ? -mv : mv;
-    printf("%s$ld.%03ld V", mv < 0 ? "-" : "", (long)(a / 1000), (long)(a % 1000));
+    printf("%s%ld.%03ld V", mv < 0 ? "-" : "", (long)(a / 1000), (long)(a % 1000));
 }
 
 static void print_temp(int32_t dc) { 
-    int32_t a dc < 0 ? -dc : dc;
+    int32_t a = dc < 0 ? -dc : dc;
     printf("%s%ld.%01ld C", dc < 0 ? "-" : "", (long)(a / 10), (long)(a % 10));
 }
 
@@ -52,7 +52,7 @@ static void print_time(uint32_t ms)
 
 // measurments
 
-static void measure(Batterypack *p) {
+static void measure(BatteryPack *p) {
     p->pack_mv = 0;
     p->vmin_mv = INT32_MAX;
     p->vmax_mv = INT32_MIN;
@@ -72,7 +72,7 @@ static void measure(Batterypack *p) {
 
 static void coulomb_count(BatteryPack *p,uint32_t dt_ms) { 
     p -> charge_mams += (int64_t)p->current_ma * dt_ms;
-    if (p -> charge_,a,s < 0) p -> charge_mams = 0;
+    if (p -> charge_mams < 0) p -> charge_mams = 0;
     if (p -> charge_mams > capacity_mams()) p -> charge_mams = capacity_mams();
 }
 
@@ -83,13 +83,15 @@ static void check_protection(BatteryPack *p, uint32_t dt_ms) {
 
     if ( p -> temp_dc < -400 || p -> temp_dc > 1250) 
     p->faults |= FAULT_SENSOR;
-    for (int c = 0; c < NUM CELLS; c++)
-        if (p -> cell_mv[c] < 500 || p -> cell_mv[c] > 5000) p->faults |= FAULTSENSOR;
+    for (int c = 0; c < NUM_CELLS; c++)
+        if (p -> cell_mv[c] < 500 || p -> cell_mv[c] > 5000) p->faults |= FAULT_SENSOR;
     
     //over voltage any cell with hysteresis
 
     if (p->vmax_mv >= g->cell_ovp_mv) p->faults |= FAULT_CELL_OV;
     else if (p->vmax_mv <= g->cell_ovp_release_mv) p->faults &= ~FAULT_CELL_OV;
+    if (p->vmin_mv <= g->cell_uvp_mv) p->faults |= FAULT_CELL_UV;
+    else if (p->vmin_mv >= g->cell_uvp_release_mv) p->faults &= ~FAULT_CELL_UV;
 
     //soft "empty" cutoff stop discrarging before reaching the hard limit 
      if (!p->input_present && p->vmin_mv <= g->cell_v_min_mv) {
@@ -101,9 +103,9 @@ static void check_protection(BatteryPack *p, uint32_t dt_ms) {
     /*Short circuit: instant trip*/ 
     if(-p->current_ma >= g->short_circuit_ma) p-> faults |= FAULT_SHORT;
     //over current: must persist OC_DELAY_MS (ignores brief spikes)
-    bool oc_chg = p ->current_ma ? g ->max_charge_ma; 
+    bool oc_chg = p->current_ma > g->max_charge_ma; 
     bool oc_dsg = -p -> current_ma > g -> max_discharge_ma;
-        if(og_chg || oc_dsg) {
+        if(oc_chg || oc_dsg) {
             p ->oc_timer_ms += dt_ms;
             if(p->oc_timer_ms >= OC_DELAY_MS) p -> faults |= oc_chg? FAULT_OC_CHG:FAULT_OC_DSG;
         } else {
@@ -129,8 +131,8 @@ static void check_protection(BatteryPack *p, uint32_t dt_ms) {
 //Cooldown ends only when we have both cooled to resume temp and the minimum time passed 
 static void update_cooldown(BatteryPack *p) {
     if(!p->cooling) return;
-    u_int32_t elapsed = p -> uptime_ms - p -> cooldown_start_ms;
-    if(p -> temp_dc <= g_params.temp_resume_dc && elapsed >= (u_int32_t) g_params.cooldown_min_ms){
+    uint32_t elapsed = p -> uptime_ms - p -> cooldown_start_ms;
+    if(p -> temp_dc <= g_params.temp_resume_dc && elapsed >= (uint32_t) g_params.cooldown_min_ms){
         p->cooling = false;
         p->faults &= ~FAULT_OVER_TEMP;
     }
@@ -142,7 +144,7 @@ static void decide_mode(BatteryPack *p){
     p->mode = MODE_FAULT;
     else if (p -> cooling)
     p->mode = MODE_COOLDOWN;
-    else if (p -> input_present && !p -> load_present)
+    else if (p -> input_present && p -> load_present)
     p->mode = MODE_PASSTHROUGH;
     else if (p->input_present)
     p->mode = MODE_CHARGING;
@@ -186,7 +188,7 @@ switch(p->phase){
         if (p->vmax_mv > g->cell_v_max_mv) p->charge_target_ma -= CV_STEP_MA;
         else if (p->vmax_mv < g->cell_v_max_mv - 10) 
         p->charge_target_ma += CV_STEP_MA;
-        if(p->charge_target_ma > g ->charge_ma) =->charge_target_ma = g->charge_ma;
+        if(p->charge_target_ma > g ->charge_ma) p->charge_target_ma = g->charge_ma;
         if(p->charge_target_ma <= g->term_ma){
             p->phase = CHG_DONE;
             p->charge_target_ma = 0;
@@ -237,7 +239,7 @@ static void apply_outputs(BatteryPack *p)
 
 //event log 
 
-static void log_events(cost BatteryPack *p, PackMode old_mode, ChargePhase old_phone, vint32_t old_faults){
+static void log_events(const BatteryPack *p, PackMode old_mode, ChargePhase old_phase, uint32_t old_faults){
     if (!p->verbose) return;
     uint32_t set_bits = p->faults & ~old_faults;
     uint32_t clr_bits = old_faults & ~p->faults;
@@ -300,12 +302,13 @@ void battery_update(BatteryPack *p, uint32_t dt_ms) {
 int battery_clear_faults(BatteryPack *p)
 {
     int n = 0;
-    for(int b = 0; b < FAULT_BITS; b++) 
-       if(p->faults & FAULTS_LATCHED & (1u << b)) 
-       n++;
-       p->faults &= ~FAULTS_LATCHED;
-       p->oc_timer_ms = 0;
-       return n;
+    for (int b = 0; b < FAULT_BITS; b++) {
+        if (p->faults & FAULTS_LATCHED & (1u << b))
+            n++;
+    }
+    p->faults &= ~FAULTS_LATCHED;
+    p->oc_timer_ms = 0;
+    return n;
 }
 
 int32_t battery_soc_x10(const BatteryPack *p){
@@ -387,21 +390,22 @@ void battery_print_status(const BatteryPack *p) {
     printf(" Pack :"); 
     print_v(p->pack_mv);
 
-    printf(" %+1d mA %+11d mW\n", (long)p->current_ma, (long long)mw);
-    printf(" SOC: %d.%d%%\n",(long) (soc / 10),(long) (soc % 10));
+    printf(" %+ld mA %+lld mW\n", (long)p->current_ma, (long long)mw);
+    printf(" SOC: %ld.%ld%%\n",(long) (soc / 10),(long) (soc % 10));
     printf("Temperature : ");
     print_temp(p -> temp_dc);
     if(p->cooling){
-        printf(" Temperature: ");
-        print_temp(p->temp_dc);
+        printf(" (cooling, resume at ");
+        print_temp(g_params.temp_resume_dc);
+        printf(")");
     
     }
     printf("\n Cells : min");
     print_v(p->vmin_mv);
     printf(" (#%d) max ", p->vmin_idx + 1);
     print_v(p->vmax_mv);
-    printf("(#%d) delta %1d mV\n" , p ->vmax_idx + 1, (long) (p->vmax_mv - p->vmin_mv));
-    printf(" Output : CHG FET %s DSG FET %s charge target %1d mA balance 0x%1X\n", p ->chg_fet ? "ON" : "off". p->dsg_fet ? "ON" : "off", (long)p->charge_target_ma, (unsigned long)p->balance_mask);
+    printf("(#%d) delta %ld mV\n" , p ->vmax_idx + 1, (long) (p->vmax_mv - p->vmin_mv));
+    printf(" Output : CHG FET %s DSG FET %s charge target %ld mA balance 0x%lX\n", p ->chg_fet ? "ON" : "off", p->dsg_fet ? "ON" : "off", (long)p->charge_target_ma, (unsigned long)p->balance_mask);
     printf(" Faults : %s\n", p->faults ? "see 'faults'" : "none");
     }
 
@@ -409,7 +413,7 @@ void battery_print_status(const BatteryPack *p) {
     for(int c = 0; c < NUM_CELLS; c++) { 
             printf(" Cell %d : ", c + 1);
             print_v(p->cell_mv[c]);
-            printf(" %+51d mV vs min", (long) (p->cell_mv[c] - p->vmin_mv));
+            printf(" %+5ld mV vs min", (long) (p->cell_mv[c] - p->vmin_mv));
        if (p->balance_mask & (1u << c)) printf("  [BALANCING]");
         if (p->cell_mv[c] >= g_params.cell_ovp_mv) printf("  [OV]");
         if (p->cell_mv[c] <= g_params.cell_uvp_mv) printf("  [UV]");
@@ -427,4 +431,12 @@ void battery_print_line(const BatteryPack *p)
     printf("  %+6ld mA  SOC %3ld.%ld%%  ", (long)p->current_ma, (long)(soc / 10), (long)(soc % 10));
     print_temp(p->temp_dc);
     printf("  faults 0x%03lX\n", (unsigned long)p->faults);
+}
+
+void battery_print_faults(const BatteryPack *p)
+{
+    if (!p->faults) printf("  No active faults.\n");
+    for (int b = 0; b < FAULT_BITS; b++)
+        if (p->faults & (1u << b)) printf("  - %s\n", battery_fault_str(1u << b));
+    printf("  Cooldown events since start: %lu\n", (unsigned long)p->cooldown_count);
 }

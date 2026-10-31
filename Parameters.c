@@ -71,16 +71,17 @@ void params_load_default(void) {
 }
 
 const ParamInfo *params_find(const char *name) {
-    for (int i = 0; i < TABLE_LEN; i++) 
+    for (int i = 0; i < TABLE_LEN; i++) {
         if (strcmp(TABLE[i].name, name) == 0)
         return &TABLE[i];
+    }
         return NULL;
 }
 
 //Cross check so the user can't set limits that contradict each other
 
 static const char *param_check(void) {
-    const BatteryParams *p = *g_oarams;
+    const BatteryParams *p = &g_params;
     if(p->cell_v_max_mv >= p ->cell_ovp_mv)
     return"v_max must be below the ovp";
     if (p->cell_ovp_release_mv >= p->cell_ovp_mv)    
@@ -114,10 +115,9 @@ int params_set(const char *name, int32_t value) {
 
     int32_t old_value = *info->value;
     *info->value = value;
-    constc char *problem = param_check();
+    const char *problem = param_check();
     if(problem) {
-        *info -> value = old; //roll back
-
+        *info->value = old_value;            // roll back 
         printf(" rejected %s\n", problem);
         return PARAM_INCONSISTENT;
     }

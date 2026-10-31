@@ -4,11 +4,12 @@ protoype not tested with any real batterys  */
 #include <stdio.h>
 #include "parameters.h"
 #include "commands.h"
-#include
+#include "battery_status.h"
+#include "Hal.h"
 
 void system_tick(BatteryPack * p) { 
     hal_sim_step(TICK_MS); //last tick of the hardware 
-    batter_update(p, TICK_MS); //update the battery on its state
+    battery_update(p, TICK_MS); //update the battery on its state
 }
 
 
